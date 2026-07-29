@@ -13,8 +13,7 @@
 #'   parameters, log-likelihood, AIC, and fitted values.
 #'
 #' @export
-RCSreg.fit <- function(mod, dat, resp_var, tol = 0.1)
-RCSreg.fit=function(mod,dat,resp_var,tol=0.1)
+RCSfixed.fit <- function(mod, dat, resp_var, tol = 0.1)
 {
   resid = residuals(mod)
   dat$resid = resid
@@ -221,14 +220,14 @@ RCSreg.fit=function(mod,dat,resp_var,tol=0.1)
 
   return(res.list)
 }
-#' A function for implementing the REMARCS algorithm with mixed effect model
-#'
-#' @param mod The initial model (mixed lmer) of the response variable
-#' @param dat The data in question. The variable for time must be entitled "t".
-#' @param resp_var The name of the variable being modeled
-#' @param tol Convergence tolerance for the iterative estimation procedure.
-#' @export
-RCSmixed.fit=function(mod,dat,resp_var,tol=0.1)
+# A function for implementing the REMARCS algorithm with mixed effect model
+#
+# @param mod The initial model (mixed lmer) of the response variable
+# @param dat The data in question. The variable for time must be entitled "t".
+# @param resp_var The name of the variable being modeled
+# @param tol Convergence tolerance for the iterative estimation procedure.
+# @export
+RCSmixed.fit_initial=function(mod,dat,resp_var,tol=0.1)
 {
 
   resid = residuals(mod)
@@ -461,7 +460,7 @@ RCSmixed.fit=function(mod,dat,resp_var,tol=0.1)
 #'   parameters, log-likelihood, AIC, and fitted values.
 #'
 #' @export
-RCSmixed.fit2 <- function(mod, dat, resp_var, tol = 0.1) {
+RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1) {
 
   # --------------------------------------------------------------------------
   # Initial mixed-effects model and daily residual summaries
