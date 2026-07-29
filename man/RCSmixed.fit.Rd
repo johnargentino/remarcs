@@ -2,19 +2,25 @@
 % Please edit documentation in R/assess.R
 \name{RCSmixed.fit}
 \alias{RCSmixed.fit}
-\title{A function for implementing the REMARCS algorithm with mixed effect model}
+\title{Fit the REMARCS model with a mixed-effects regression component}
 \usage{
 RCSmixed.fit(mod, dat, resp_var, tol = 0.1)
 }
 \arguments{
-\item{mod}{The initial model (mixed lmer) of the response variable}
+\item{mod}{The initial mixed-effects model fitted with \code{lme4::lmer()}.}
 
-\item{dat}{The data in question. The variable for time must be entitled "t".}
+\item{dat}{The data used for fitting. The variable for time must be named
+\code{t}.}
 
-\item{resp_var}{The name of the variable being modeled}
+\item{resp_var}{Character string giving the name of the response variable.}
 
-\item{tol}{Convergence tolerance for the iterative estimation procedure.}
+\item{tol}{Convergence tolerance for the iterative REMARCS algorithm.}
+}
+\value{
+A list containing the estimated regression parameters, time-series
+parameters, log-likelihood, AIC, and fitted values.
 }
 \description{
-A function for implementing the REMARCS algorithm with mixed effect model
+Implements the REMARCS algorithm using an initial mixed-effects model
+and a latent ARMA(1, 1) time-series component.
 }
