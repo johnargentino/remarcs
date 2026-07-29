@@ -1,0 +1,7 @@
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rcheck/
+.DS_Store
+.Rapp.history
