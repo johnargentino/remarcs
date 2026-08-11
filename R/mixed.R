@@ -318,7 +318,7 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     B <- b_hat_list$B
 
     B_inv <- solve(B)
-    var_re_update <- update_Sigma_b(b_hat = b_hat, B_inv = B_inv, mod = me)
+    var_re_update <- update_Sigma_b(b_hat = b_hat, B_inv = B_inv, mod = mod)
 
 
     var_re <- var_re_update$var_re
