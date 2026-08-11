@@ -4,7 +4,7 @@
 \alias{RCSmixed.fit}
 \title{Fit the REMARCS model with a mixed-effects regression component}
 \usage{
-RCSmixed.fit(mod, dat, resp_var, tol = 0.1)
+RCSmixed.fit(mod, dat, resp_var, tol = 0.1, max_updates = 10)
 }
 \arguments{
 \item{mod}{The initial mixed-effects model fitted with \code{lme4::lmer()}.}

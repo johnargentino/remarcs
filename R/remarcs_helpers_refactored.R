@@ -307,3 +307,303 @@ f_u_hat <- function(n_t, residuals, Gamma, var_epsilon) {
 
   as.vector(u1)
 }
+
+estimate_b <- function(
+    y,
+    X_f,
+    X_r,
+    X_t,
+    beta_hat,
+    Sigma_b,
+    Gplus_inv,
+    sigma_eps2
+) {
+
+  # ---------------------------------------------------------
+  # 1. Residual after removing fixed effects
+  # ---------------------------------------------------------
+
+  r <- y - X_f %*% beta_hat
+
+
+  # ---------------------------------------------------------
+  # 2. Useful cross-products
+  # ---------------------------------------------------------
+
+  XtXr <- Matrix::crossprod(X_t, X_r)  # X_t' X_r
+  Xtr  <- Matrix::crossprod(X_t, r)    # X_t' r
+
+  XrXr <- Matrix::crossprod(X_r)       # X_r' X_r
+  Xrr  <- Matrix::crossprod(X_r, r)    # X_r' r
+
+
+  # ---------------------------------------------------------
+  # 3. Calculate v = X_r' A^{-1} r
+  #
+  # A^{-1} =
+  #   sigma_eps^-2 I
+  #   - sigma_eps^-4 X_t Gplus_inv X_t'
+  # ---------------------------------------------------------
+
+  c <- 1 / sigma_eps2
+
+  v <- c * Xrr -
+    c^2 * Matrix::crossprod(
+      XtXr,
+      Gplus_inv %*% Xtr
+    )
+
+
+  # ---------------------------------------------------------
+  # 4. Calculate K = X_r' A^{-1} X_r
+  # ---------------------------------------------------------
+
+  K <- c * XrXr -
+    c^2 * Matrix::crossprod(
+      XtXr,
+      Gplus_inv %*% XtXr
+    )
+
+
+  # ---------------------------------------------------------
+  # 5. B = Sigma_b^{-1} + K
+  # ---------------------------------------------------------
+
+  Sigma_b_inv <- solve(Sigma_b)
+
+  B <- Sigma_b_inv + K
+
+
+  # ---------------------------------------------------------
+  # 6. BLUP / posterior mean of b
+  #
+  # b_hat = B^{-1} v
+  # ---------------------------------------------------------
+
+  b_hat <- solve(B, v)
+
+
+  return(list(
+    b_hat = b_hat,
+    B = B,
+    v = v
+  ))
+}
+
+
+estimate_beta_gls <- function(
+    y,
+    X_f,
+    X_r,
+    X_t,
+    Sigma_b,
+    Gplus_inv,
+    sigma_eps2
+) {
+
+  # ---------------------------------------------------------
+  # 1. Constants
+  # ---------------------------------------------------------
+
+  c <- 1 / sigma_eps2
+
+
+  # ---------------------------------------------------------
+  # 2. Cross-products involving X_t
+  # ---------------------------------------------------------
+
+  XtXr <- Matrix::crossprod(X_t, X_r)  # X_t' X_r
+  XtXf <- Matrix::crossprod(X_t, X_f)  # X_t' X_f
+  Xty  <- Matrix::crossprod(X_t, y)    # X_t' y
+
+
+  # ---------------------------------------------------------
+  # 3. K = X_r' A^{-1} X_r
+  # ---------------------------------------------------------
+
+  XrXr <- Matrix::crossprod(X_r)
+
+  K <- c * XrXr -
+    c^2 * Matrix::crossprod(
+      XtXr,
+      Gplus_inv %*% XtXr
+    )
+
+
+  # ---------------------------------------------------------
+  # 4. B = Sigma_b^{-1} + K
+  # ---------------------------------------------------------
+
+  Sigma_b_inv <- solve(Sigma_b)
+
+  B <- Sigma_b_inv + K
+
+
+  # ---------------------------------------------------------
+  # 5. A^{-1} X_f
+  # ---------------------------------------------------------
+
+  Ainv_Xf <- c * X_f -
+    c^2 * X_t %*% (
+      Gplus_inv %*% XtXf
+    )
+
+
+  # ---------------------------------------------------------
+  # 6. A^{-1} y
+  # ---------------------------------------------------------
+
+  Ainv_y <- c * y -
+    c^2 * X_t %*% (
+      Gplus_inv %*% Xty
+    )
+
+
+  # ---------------------------------------------------------
+  # 7. X_r' A^{-1} X_f
+  # ---------------------------------------------------------
+
+  Xr_Ainv_Xf <- Matrix::crossprod(
+    X_r,
+    Ainv_Xf
+  )
+
+
+  # ---------------------------------------------------------
+  # 8. X_r' A^{-1} y
+  # ---------------------------------------------------------
+
+  Xr_Ainv_y <- Matrix::crossprod(
+    X_r,
+    Ainv_y
+  )
+
+
+  # ---------------------------------------------------------
+  # 9. Compute:
+  #
+  # X_f' Sigma_y^{-1} X_f
+  #
+  # = X_f' A^{-1} X_f
+  #   - X_f' A^{-1} X_r
+  #     B^{-1}
+  #     X_r' A^{-1} X_f
+  # ---------------------------------------------------------
+
+  Xf_Ainv_Xf <- Matrix::crossprod(
+    X_f,
+    Ainv_Xf
+  )
+
+  correction_Xf <- t(Xr_Ainv_Xf) %*%
+    solve(B, Xr_Ainv_Xf)
+
+  Xt_Siginv_Xf <- Xf_Ainv_Xf -
+    correction_Xf
+
+
+  # ---------------------------------------------------------
+  # 10. Compute:
+  #
+  # X_f' Sigma_y^{-1} y
+  #
+  # = X_f' A^{-1} y
+  #   - X_f' A^{-1} X_r
+  #     B^{-1}
+  #     X_r' A^{-1} y
+  # ---------------------------------------------------------
+
+  Xf_Ainv_y <- Matrix::crossprod(
+    X_f,
+    Ainv_y
+  )
+
+  correction_y <- t(Xr_Ainv_Xf) %*%
+    solve(B, Xr_Ainv_y)
+
+  Xf_Siginv_y <- Xf_Ainv_y -
+    correction_y
+
+
+  # ---------------------------------------------------------
+  # 11. GLS estimate
+  # ---------------------------------------------------------
+
+  beta_hat <- solve(
+    Xt_Siginv_Xf,
+    Xf_Siginv_y
+  )
+
+
+  # ---------------------------------------------------------
+  # 12. Return useful quantities
+  # ---------------------------------------------------------
+
+  return(list(
+    beta_hat = beta_hat,
+    B = B,
+    Xt_Siginv_Xf = Xt_Siginv_Xf,
+    Xf_Siginv_y = Xf_Siginv_y
+  ))
+}
+
+update_Sigma_b <- function(b_hat, B_inv, mod) {
+
+  # Number of levels in each random-effect grouping factor
+  m1 <- nlevels(getME(mod, "flist")$adm1)
+  m2 <- nlevels(getME(mod, "flist")$adm2)
+
+  # Split random effects
+  b1 <- b_hat[1:m1]
+  b2 <- b_hat[(m1 + 1):(m1 + m2)]
+
+  # Conditional covariance blocks
+  C11 <- B_inv[1:m1, 1:m1]
+  C22 <- B_inv[(m1 + 1):(m1 + m2),
+               (m1 + 1):(m1 + m2)]
+
+  # EM variance updates
+  sigma2_adm1 <- (
+    sum(b1^2) + sum(diag(C11))
+  ) / m1
+
+  sigma2_adm2 <- (
+    sum(b2^2) + sum(diag(C22))
+  ) / m2
+
+  return(c(
+    sigma2_adm1 = sigma2_adm1,
+    sigma2_adm2 = sigma2_adm2
+  ))
+}
+
+update_Sigma_b <- function(b_hat, B_inv, mod) {
+
+  # Number of levels in each random-effect grouping factor
+  m1 <- nlevels(getME(mod, "flist")$adm1)
+  m2 <- nlevels(getME(mod, "flist")$'adm1:adm2')
+
+  # Split random effects
+  b1 <- b_hat[1:m1]
+  b2 <- b_hat[(m1 + 1):(m1 + m2)]
+
+  # Conditional covariance blocks
+  C11 <- B_inv[1:m1, 1:m1]
+  C22 <- B_inv[(m1 + 1):(m1 + m2),
+               (m1 + 1):(m1 + m2)]
+
+  # EM variance updates
+  sigma2_adm1 <- (
+    sum(b1^2) + sum(diag(C11))
+  ) / m1
+
+  sigma2_adm2 <- (
+    sum(b2^2) + sum(diag(C22))
+  ) / m2
+  var_re2 = diag(rep(sigma2_adm2, m2))
+  var_re1 = diag(rep(sigma2_adm1, m1))
+  return(list(sigma2 = c(
+    sigma2_adm1 = sigma2_adm1,
+    sigma2_adm2 = sigma2_adm2
+  ), var_re = bdiag(var_re2, var_re1)))
+}
