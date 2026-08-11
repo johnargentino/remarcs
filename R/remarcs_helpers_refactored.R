@@ -495,7 +495,7 @@ estimate_beta_gls <- function(
     Ainv_Xf
   )
 
-  correction_Xf <- t(Xr_Ainv_Xf) %*%
+  correction_Xf <- Matrix::t(Xr_Ainv_Xf) %*%
     solve(B, Xr_Ainv_Xf)
 
   Xt_Siginv_Xf <- Xf_Ainv_Xf -
@@ -518,7 +518,7 @@ estimate_beta_gls <- function(
     Ainv_y
   )
 
-  correction_y <- t(Xr_Ainv_Xf) %*%
+  correction_y <- Matrix::t(Xr_Ainv_Xf) %*%
     solve(B, Xr_Ainv_y)
 
   Xf_Siginv_y <- Xf_Ainv_y -
