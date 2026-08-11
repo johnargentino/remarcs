@@ -299,7 +299,7 @@ f_u_hat <- function(n_t, residuals, Gamma, var_epsilon) {
     sqN %*%
     NGN_evec %*%
     Matrix::solve(L) %*%
-    t(NGN_evec) %*%
+    Matrix::t(NGN_evec) %*%
     sqN
 
   u1 <- u1[n_t != 0, n_t != 0]
@@ -518,7 +518,7 @@ estimate_beta_gls <- function(
     Ainv_y
   )
 
-  correction_y <- t(Xr_Ainv_Xf) %*%
+  correction_y <- Matrix::t(Xr_Ainv_Xf) %*%
     Matrix::solve(B, Xr_Ainv_y)
 
   Xf_Siginv_y <- Xf_Ainv_y -
