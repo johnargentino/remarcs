@@ -298,7 +298,7 @@ f_u_hat <- function(n_t, residuals, Gamma, var_epsilon) {
   u1 <- Gamma %*%
     sqN %*%
     NGN_evec %*%
-    solve(L) %*%
+    Matrix::solve(L) %*%
     t(NGN_evec) %*%
     sqN
 
@@ -369,7 +369,7 @@ estimate_b <- function(
   # 5. B = Sigma_b^{-1} + K
   # ---------------------------------------------------------
 
-  Sigma_b_inv <- solve(Sigma_b)
+  Sigma_b_inv <- Matrix::solve(Sigma_b)
 
   B <- Sigma_b_inv + K
 
@@ -380,7 +380,7 @@ estimate_b <- function(
   # b_hat = B^{-1} v
   # ---------------------------------------------------------
 
-  b_hat <- solve(B, v)
+  b_hat <- Matrix::solve(B, v)
 
 
   return(list(
@@ -434,7 +434,7 @@ estimate_beta_gls <- function(
   # 4. B = Sigma_b^{-1} + K
   # ---------------------------------------------------------
 
-  Sigma_b_inv <- solve(Sigma_b)
+  Sigma_b_inv <- Matrix::solve(Sigma_b)
 
   B <- Sigma_b_inv + K
 
@@ -496,7 +496,7 @@ estimate_beta_gls <- function(
   )
 
   correction_Xf <- Matrix::t(Xr_Ainv_Xf) %*%
-    solve(B, Xr_Ainv_Xf)
+    Matrix::solve(B, Xr_Ainv_Xf)
 
   Xt_Siginv_Xf <- Xf_Ainv_Xf -
     correction_Xf
@@ -518,8 +518,8 @@ estimate_beta_gls <- function(
     Ainv_y
   )
 
-  correction_y <- Matrix::t(Xr_Ainv_Xf) %*%
-    solve(B, Xr_Ainv_y)
+  correction_y <- t(Xr_Ainv_Xf) %*%
+    Matrix::solve(B, Xr_Ainv_y)
 
   Xf_Siginv_y <- Xf_Ainv_y -
     correction_y
@@ -529,7 +529,7 @@ estimate_beta_gls <- function(
   # 11. GLS estimate
   # ---------------------------------------------------------
 
-  beta_hat <- solve(
+  beta_hat <- Matrix::solve(
     Xt_Siginv_Xf,
     Xf_Siginv_y
   )
