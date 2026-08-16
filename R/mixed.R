@@ -16,22 +16,8 @@
 #' @export
 RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
 
-  #### Cheating with fixed.fit
-  # rand_eff <- predict(mod, re.form = NULL) -
-  #   predict(mod, re.form = NA)
-  #
-  # y_star <- model.response(model.frame(mod)) - rand_eff
-  #
-  # fixed_form = lme4::nobars(formula(mod))
-  #
-  # dat$less_re = y_star
-  #
-  # fixed_form[[2]] = quote(less_re)
-  # no_re = lm(data = dat, formula = fixed_form)
-  # fixed.fit = remarcs::RCSfixed.fit(mod = no_re, dat = dat, resp_var = "less_re", tol)
-  # return(fixed.fit)
 
-  ######
+
 
   # --------------------------------------------------------------------------
   # Initial mixed-effects model and daily residual summaries
@@ -42,6 +28,9 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
   dat$resid <- resid
   var_re = sigma(mod)^2 * tcrossprod(getME(mod, "Lambda"))
 
+  # --------------------------------------------------------------------------
+  # Aggregate residuals
+  # --------------------------------------------------------------------------
   df_w <- dat |>
     dplyr::group_by(t) |>
     dplyr::summarise(
@@ -52,16 +41,10 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     )
   n_t = df_w$n
 
-  # Plot the original response. This is retained from the original function.
-  # plot.orig <- ggplot2::ggplot(data = dat) +
-  #   ggplot2::geom_point(
-  #     mapping = ggplot2::aes(x = t, y = dat[[resp_var]])
-  #   )
-
-  # y <- dat[[resp_var]]
 
   # Fill in missing days so that the time-series component has a complete
   # sequence of time points.
+
   df_w <- dplyr::left_join(
     tibble::tibble(t = 1:max(df_w$t)),
     df_w,
@@ -94,7 +77,7 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
   df_w_initial <- df_w
 
   # --------------------------------------------------------------------------
-  # Design matrices and initial mixed-effects quantities
+  # Design matrices and initial variance estiamtes
   # --------------------------------------------------------------------------
 
   X_f <- stats::model.matrix(mod)
@@ -108,10 +91,6 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
 
   l1 <- as.numeric(stats::logLik(mod))
   dat$resid_initial <- dat$resid
-
-  # --------------------------------------------------------------------------
-  # Initial variance estimates
-  # --------------------------------------------------------------------------
 
   n_t <- df_w$n
   X_t <- f_Xt(n_t)
@@ -130,6 +109,10 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
 
   var_a_hat <- var_eps_hat * mean((n_t[n_t != 0])^(-1))
 
+  # --------------------------------------------------------------------------
+  # Apply ARMAN method for latent parameter point estimates
+  # --------------------------------------------------------------------------
+
   wong_est <- wong(
     ar_hat = phi_hat,
     ma_b_hat = theta_b_hat,
@@ -140,6 +123,11 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
   theta_hat <- wong_est[1]
   var_eta_hat <- wong_est[2]
 
+
+  # --------------------------------------------------------------------------
+  # Estimate Time Series Covariance Matrix
+  # --------------------------------------------------------------------------
+
   G_hat <- fG(
     size = T,
     eta_variance = var_eta_hat,
@@ -147,7 +135,9 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     ma = theta_hat
   )
 
-
+  # --------------------------------------------------------------------------
+  # Estimate Time Series and calculate likelihood
+  # --------------------------------------------------------------------------
 
   u_hat <- f_u_hat(
     n_t,
@@ -178,6 +168,10 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
   l_new <- l2 + l1
   l_old <- l_new + 2 * tol
 
+  # --------------------------------------------------------------------------
+  # Set up vectors to track parameter estimates and likelihoods
+  # --------------------------------------------------------------------------
+
   l1_track <- l1
   l2_track <- l2
   l_track <- l_old
@@ -194,9 +188,18 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
   # --------------------------------------------------------------------------
   updates = 1
   while (abs(l_old - l_new) > tol & updates <= max_updates) {
+
+    # --------------------------------------------------------------------------
+    # track updates
+    # --------------------------------------------------------------------------
     updates = updates + 1
     l_old <- l_new
 
+
+    # --------------------------------------------------------------------------
+    # Generate transformed eigendecomposition to facilitate later calculations
+    # NOTE: This may prove later to be unnecessary
+    # --------------------------------------------------------------------------
     NGN_eigen <- eigen(
       N^(1 / 2) %*% G_hat %*% N^(1 / 2)
     )
@@ -207,6 +210,10 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
 
     V <- f_V(n_t)
 
+    # --------------------------------------------------------------------------
+    # Extract time series estimate and refit mixed effect model to update conditional likelihood
+    # Eventually unnecessary if conditioning on aggregate values instead of time series
+    # --------------------------------------------------------------------------
     dat$less_u_hat <-
       dat[[resp_var]] -
       as.vector(X_t[, observed_days] %*% u_hat)
@@ -224,7 +231,7 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     X_r_sparse <- Matrix::Matrix(X_r, sparse = TRUE)
 
     # ------------------------------------------------------------------------
-    # Woodbury calculations
+    # Woodbury calculations are used here to lessen calculation time
     # ------------------------------------------------------------------------
 
     G_inv <- chol2inv(chol(G_hat))
@@ -237,62 +244,71 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     B_inv <- chol2inv(chol(B_inv))
 
 
-    R1 <-
-      Matrix::crossprod(X_f_m) / var_eps_hat -
-      var_eps_hat^(-2) *
-      Matrix::crossprod(X_f_m, X_t) %*%
-      Gplus_inv %*%
-      Matrix::crossprod(X_t, X_f_m)
-
-    Bchol <- t(chol(B_inv))
-
-    R2_half <-
-      Matrix::t(X_f_m) / var_eps_hat -
-      var_eps_hat^(-2) *
-      Matrix::t(X_f_m) %*%
-      X_t_sparse %*%
-      Gplus_inv %*%
-      Matrix::t(X_t_sparse)
-
-    R2_half <- R2_half %*% X_r_sparse %*% Bchol
-    R2 <- R2_half %*% Matrix::t(R2_half)
-
-    R <- R1 + R2
-    R_inv <- chol2inv(chol(R))
-
     # ------------------------------------------------------------------------
-    # GLS estimate of beta
+    # Delete everything commented below if function still runs well.
     # ------------------------------------------------------------------------
 
-    S1 <-
-      y / var_eps_hat -
-      as.vector(
-        var_eps_hat^(-2) *
-          X_t_sparse %*%
-          (
-            Gplus_inv %*%
-              (Matrix::t(X_t_sparse) %*% y)
-          )
-      )
 
-    S2 <- Matrix::t(X_r_sparse) %*% S1
-    S2 <- B_inv %*% S2
-    S2 <- X_r_sparse %*% S2
+    # R1 <-
+    #   Matrix::crossprod(X_f_m) / var_eps_hat -
+    #   var_eps_hat^(-2) *
+    #   Matrix::crossprod(X_f_m, X_t) %*%
+    #   Gplus_inv %*%
+    #   Matrix::crossprod(X_t, X_f_m)
+    #
+    # Bchol <- t(chol(B_inv))
+    #
+    # R2_half <-
+    #   Matrix::t(X_f_m) / var_eps_hat -
+    #   var_eps_hat^(-2) *
+    #   Matrix::t(X_f_m) %*%
+    #   X_t_sparse %*%
+    #   Gplus_inv %*%
+    #   Matrix::t(X_t_sparse)
+    #
+    # R2_half <- R2_half %*% X_r_sparse %*% Bchol
+    # R2 <- R2_half %*% Matrix::t(R2_half)
+    #
+    # R <- R1 + R2
+    # R_inv <- chol2inv(chol(R))
+    #
+    #
+    # S1 <-
+    #   y / var_eps_hat -
+    #   as.vector(
+    #     var_eps_hat^(-2) *
+    #       X_t_sparse %*%
+    #       (
+    #         Gplus_inv %*%
+    #           (Matrix::t(X_t_sparse) %*% y)
+    #       )
+    #   )
+    #
+    # S2 <- Matrix::t(X_r_sparse) %*% S1
+    # S2 <- B_inv %*% S2
+    # S2 <- X_r_sparse %*% S2
+    #
+    # S2 <-
+    #   S2 / var_eps_hat -
+    #   var_eps_hat^(-2) *
+    #   (
+    #     X_t_sparse %*%
+    #       (
+    #         Gplus_inv %*%
+    #           (Matrix::t(X_t_sparse) %*% S2)
+    #       )
+    #   )
+    #
+    # S <- S1 - S2
+    #
+    # beta_hat <- R_inv %*% Matrix::t(X_f_m) %*% S
 
-    S2 <-
-      S2 / var_eps_hat -
-      var_eps_hat^(-2) *
-      (
-        X_t_sparse %*%
-          (
-            Gplus_inv %*%
-              (Matrix::t(X_t_sparse) %*% S2)
-          )
-      )
 
-    S <- S1 - S2
 
-    beta_hat <- R_inv %*% Matrix::t(X_f_m) %*% S
+    # ------------------------------------------------------------------------
+    # Update fixed effect parameter estimates
+    # ------------------------------------------------------------------------
+
     beta_hat_2 = estimate_beta_gls(y = y,
                                    X_f = X_f_m,
                                    X_r = X_r_sparse,
@@ -302,7 +318,7 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
                                    sigma_eps2 = var_eps_hat)
     beta_hat = beta_hat_2$beta_hat
     # ------------------------------------------------------------------------
-    # Update residuals and time-series component
+    # Update random effect intercepts and variance estimates
     # ------------------------------------------------------------------------
 
     b_hat_list = estimate_b(y = y,
@@ -325,6 +341,9 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
 
 
 
+    # ------------------------------------------------------------------------
+    # Update ARMA-Noise Process Estimate
+    # ------------------------------------------------------------------------
 
 
     dat$resid <-
@@ -333,10 +352,11 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
           X_f_m %*% beta_hat - X_r %*% b_hat
       )
 
-    ###DONT FORGET TO ADD UPDATE to Sigma_b######
+    # ------------------------------------------------------------------------
+    # Repeat fitting of ARMA-Noise process
+    # ------------------------------------------------------------------------
 
 
-    # dat$resid <- stats::residuals(re_new)
     df_w <- dat |>
       dplyr::group_by(t) |>
       dplyr::summarise(
@@ -389,6 +409,9 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     theta_hat <- wong_est[1]
     var_eta_hat <- wong_est[2]
 
+    # ------------------------------------------------------------------------
+    # Update estimates of time series and corresponding covariance matrix
+    # ------------------------------------------------------------------------
 
     G_hat <- fG(
       size = T,
@@ -405,6 +428,11 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     )
 
     G_obs <- G_hat[observed_days, observed_days]
+
+    # ------------------------------------------------------------------------
+    # Update level 2 likelihood
+    # ------------------------------------------------------------------------
+
 
     l2 <- -1 / 2 * (
       T * log(2 * pi) +
@@ -424,6 +452,11 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     # cat("l2 = ", l2, "\n")
 
     l_new <- l2 + l1
+
+    # ------------------------------------------------------------------------
+    # Store parameter estimates and likelihoods
+    # ------------------------------------------------------------------------
+
 
     l1_track <- append(l1_track, l1)
     l2_track <- append(l2_track, l2)
@@ -477,63 +510,86 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
   S_l <- S_f[c(1, 5, 6), c(1, 5, 6)]
   S_l_plot <- S_l / T
 
-  vec_est <- c(
+  ts.pars <- c(
     phi_hat,
     theta_hat,
     var_eta_hat
   )
 
-  vec_true <- c(
-    phi_hat,
-    theta_hat,
-    var_eta_hat
-  )
-
-  vec_name <- c(
+  names(ts.pars) <- c(
     "phi",
     "theta",
     "var_eta"
   )
 
+  ts.pars <- cbind(
+    ts.pars,
+    sqrt(diag(S_l_plot))
+  )
+
+  pvals_ts <- 2 * (
+    1 - stats::pnorm(
+      abs(ts.pars[, 1] / ts.pars[, 2])
+    )
+  )
+
+  ts.pars <- cbind(
+    ts.pars,
+    pvals_ts
+  )
+
+
+
   # --------------------------------------------------------------------------
   # Standard errors for beta
+  # Might need to be updated to account for random effect terms
   # --------------------------------------------------------------------------
 
-  XftXf <- Matrix::crossprod(X_f_m)
-  XftXf_inv <- solve(XftXf)
+  # XftXf <- Matrix::crossprod(X_f_m)
+  # XftXf_inv <- solve(XftXf)
+  #
+  # Sigma_beta3_term1 <-
+  #   Matrix::t(X_f_m) %*%
+  #   X_t[, observed_days] %*%
+  #   diag(sqrt(1 / n_t[observed_days])) %*%
+  #   NGN_evec[observed_days, observed_days] %*%
+  #   diag(
+  #     sqrt(
+  #       1 / (
+  #         NGN_eval[observed_days] +
+  #           var_eps_hat
+  #       )
+  #     )
+  #   )
+  #
+  # Sigma_beta3_term1 <-
+  #   Sigma_beta3_term1 %*%
+  #   Matrix::t(Sigma_beta3_term1)
+  #
+  # Sigma_beta3_term2 <-
+  #   Matrix::t(X_f_m) %*%
+  #   V
+  #
+  # Sigma_beta3_term2 <-
+  #   Sigma_beta3_term2 %*%
+  #   Matrix::t(Sigma_beta3_term2) /
+  #   var_eps_hat
+  #
+  # Sigma_beta3 <-
+  #   solve(
+  #     Sigma_beta3_term1 +
+  #       Sigma_beta3_term2
+  #   )
 
-  Sigma_beta3_term1 <-
-    Matrix::t(X_f_m) %*%
-    X_t[, observed_days] %*%
-    diag(sqrt(1 / n_t[observed_days])) %*%
-    NGN_evec[observed_days, observed_days] %*%
-    diag(
-      sqrt(
-        1 / (
-          NGN_eval[observed_days] +
-            var_eps_hat
-        )
-      )
-    )
+  Sigma_beta = var_beta(X_f,
+                        X_r,
+                        X_t,
+                        Sigma_b = var_re,
+                        Gplus_inv = Gplus_inv,
+                        sigma_eps2 = var_eps_hat)
 
-  Sigma_beta3_term1 <-
-    Sigma_beta3_term1 %*%
-    Matrix::t(Sigma_beta3_term1)
 
-  Sigma_beta3_term2 <-
-    Matrix::t(X_f_m) %*%
-    V
 
-  Sigma_beta3_term2 <-
-    Sigma_beta3_term2 %*%
-    Matrix::t(Sigma_beta3_term2) /
-    var_eps_hat
-
-  Sigma_beta3 <-
-    solve(
-      Sigma_beta3_term1 +
-        Sigma_beta3_term2
-    )
 
   # --------------------------------------------------------------------------
   # Final estimates and fitted values
@@ -541,7 +597,7 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
 
   beta_hat <- cbind(
     beta_hat,
-    sqrt(diag(Sigma_beta3))
+    sqrt(diag(Sigma_beta))
   )
 
   pvals <- 2 * (
@@ -563,17 +619,9 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     TS = X_t[, observed_days] %*% u_hat
   )
 
-  ts.pars <- c(
-    phi_hat,
-    theta_hat,
-    var_eta_hat
-  )
 
-  names(ts.pars) <- c(
-    "phi",
-    "theta",
-    "var_eta"
-  )
+
+
 
   res.list <- list(
     beta_hat,
@@ -582,6 +630,8 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10) {
     AIC,
     fitted.mat
   )
+
+
 
   names(res.list) <- c(
     "Beta_Pars",

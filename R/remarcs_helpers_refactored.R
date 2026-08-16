@@ -577,33 +577,57 @@ update_Sigma_b <- function(b_hat, B_inv, mod) {
   ))
 }
 
-update_Sigma_b <- function(b_hat, B_inv, mod) {
 
-  # Number of levels in each random-effect grouping factor
-  m1 <- nlevels(getME(mod, "flist")$adm1)
-  m2 <- nlevels(getME(mod, "flist")$'adm1:adm2')
+var_beta <- function(
+    X_f,
+    X_r,
+    X_t,
+    Sigma_b,
+    Gplus_inv,
+    sigma_eps2
+    ){
+  #Sigma_beta = (X_f'Sigma_y^{-1}X_f)^{-1}
 
-  # Split random effects
-  b1 <- b_hat[1:m1]
-  b2 <- b_hat[(m1 + 1):(m1 + m2)]
+  # ---------------------------------------------------------
+  # 1. Constants
+  # ---------------------------------------------------------
 
-  # Conditional covariance blocks
-  C11 <- B_inv[1:m1, 1:m1]
-  C22 <- B_inv[(m1 + 1):(m1 + m2),
-               (m1 + 1):(m1 + m2)]
+  c <- 1 / sigma_eps2
 
-  # EM variance updates
-  sigma2_adm1 <- (
-    sum(b1^2) + sum(diag(C11))
-  ) / m1
 
-  sigma2_adm2 <- (
-    sum(b2^2) + sum(diag(C22))
-  ) / m2
-  var_re2 = diag(rep(sigma2_adm2, m2))
-  var_re1 = diag(rep(sigma2_adm1, m1))
-  return(list(sigma2 = c(
-    sigma2_adm1 = sigma2_adm1,
-    sigma2_adm2 = sigma2_adm2
-  ), var_re = bdiag(var_re2, var_re1)))
-}
+  # ---------------------------------------------------------
+  # 2. Cross-products involving X_t
+  # ---------------------------------------------------------
+
+  XtXr <- Matrix::crossprod(X_t, X_r)  # X_t' X_r
+  XtXf <- Matrix::crossprod(X_t, X_f)  # X_t' X_f
+  Xty  <- Matrix::crossprod(X_t, y)    # X_t' y
+
+
+  # ---------------------------------------------------------
+  # 3. K = X_r' A^{-1} X_r
+  # ---------------------------------------------------------
+
+  XrXr <- Matrix::crossprod(X_r)
+
+  K <- c * XrXr -
+    c^2 * Matrix::crossprod(
+      XtXr,
+      Gplus_inv %*% XtXr
+    )
+
+
+  # ---------------------------------------------------------
+  # 4. B = Sigma_b^{-1} + K
+  # ---------------------------------------------------------
+
+  Sigma_b_inv <- Matrix::solve(Sigma_b)
+
+  B <- Sigma_b_inv + K
+
+  # X_f' A^{-1}
+  XfAinv = Matrix::t(X_f) / sigma_eps2 - sigma_eps2^{-2} * ((Matrix::t(X_f) %*% X_t) %*% Gplus_inv) %*% Matrix::t(X_t)
+  XfSyinvXf = XfAinv %*% X_f - ((XfAinv %*% X_r) %*% B_inv) %*% Matrix::t(X_r) %*% Matrix::t(XfAinv)
+  z = solve(XfSyinvXf)
+  return(z)
+  }
