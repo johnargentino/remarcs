@@ -551,16 +551,16 @@ update_Sigma_b <- function(b_hat, B_inv, mod) {
 
   # Number of levels in each random-effect grouping factor
   m1 <- nlevels(getME(mod, "flist")$adm1)
-  m2 <- nlevels(getME(mod, "flist")$adm2)
+  m2 <- nlevels(getME(mod, "flist")$`adm1:adm2`)
 
   # Split random effects
-  b1 <- b_hat[1:m1]
-  b2 <- b_hat[(m1 + 1):(m1 + m2)]
+  b2 <- b_hat[1:m2]
+  b1 <- b_hat[(m2 + 1):(m1 + m2)]
 
   # Conditional covariance blocks
-  C11 <- B_inv[1:m1, 1:m1]
-  C22 <- B_inv[(m1 + 1):(m1 + m2),
-               (m1 + 1):(m1 + m2)]
+  C22 <- B_inv[1:m2, 1:m2]
+  C11 <- B_inv[(m2 + 1):(m1 + m2),
+               (m2 + 1):(m1 + m2)]
 
   # EM variance updates
   sigma2_adm1 <- (
@@ -571,10 +571,12 @@ update_Sigma_b <- function(b_hat, B_inv, mod) {
     sum(b2^2) + sum(diag(C22))
   ) / m2
 
-  return(c(
+  dd = c(rep(sigma2_adm2, m2), rep(sigma2_adm1, m1))
+  dm = Diagonal(x = dd)
+  return(list(variances = c(
     sigma2_adm1 = sigma2_adm1,
     sigma2_adm2 = sigma2_adm2
-  ))
+  ), matrix = dm))
 }
 
 
@@ -601,7 +603,7 @@ var_beta <- function(
 
   XtXr <- Matrix::crossprod(X_t, X_r)  # X_t' X_r
   XtXf <- Matrix::crossprod(X_t, X_f)  # X_t' X_f
-  Xty  <- Matrix::crossprod(X_t, y)    # X_t' y
+  #Xty  <- Matrix::crossprod(X_t, y)    # X_t' y
 
 
   # ---------------------------------------------------------
@@ -630,4 +632,63 @@ var_beta <- function(
   XfSyinvXf = XfAinv %*% X_f - ((XfAinv %*% X_r) %*% B_inv) %*% Matrix::t(X_r) %*% Matrix::t(XfAinv)
   z = solve(XfSyinvXf)
   return(z)
-  }
+}
+
+
+
+conf_region_2d <- function(alpha = .05,
+                           theta_hat,
+                           theta_true,
+                           Sigma,
+                           n_points = 200,
+                           level_label = TRUE
+) {
+  stopifnot(
+    length(theta_hat) == 2,
+    is.matrix(Sigma),
+    all(dim(Sigma) == c(2, 2))
+  )
+
+  # Chi-square cutoff
+  r2 <- qchisq(alpha, df = 3)
+
+  # Eigen decomposition
+  eig <- eigen(Sigma)
+  A <- eig$vectors %*% diag(sqrt(eig$values))
+
+  # Parametric circle
+  t <- seq(0, 2 * pi, length.out = n_points)
+  circle <- rbind(cos(t), sin(t))
+
+  # Ellipse
+  ellipse <- t(theta_hat + sqrt(r2) * A %*% circle)
+
+  df_ellipse <- data.frame(
+    x = ellipse[, 1],
+    y = ellipse[, 2]
+  )
+
+  df_point <- data.frame(
+    x = theta_hat[1],
+    y = theta_hat[2]
+  )
+
+
+
+  p <- ggplot(df_ellipse, aes(x, y)) +
+    geom_path(linewidth = 1) +
+    geom_point(data = df_point, aes(x, y), size = 3, col = "red") +
+    geom_point(data = tibble(x = theta_true[1], y = theta_true[2]), mapping = aes(x,y), col = "blue") +
+    coord_equal() +
+    theme_minimal() +
+    labs(
+      x = expression(theta[1]),
+      y = expression(theta[2]),
+      title = if (level_label)
+        paste0(round((1 - alpha) * 100), "% Confidence Region")
+      else NULL
+    )
+
+  return(p)
+}
+
