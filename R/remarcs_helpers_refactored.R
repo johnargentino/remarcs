@@ -626,6 +626,7 @@ var_beta <- function(
   Sigma_b_inv <- Matrix::solve(Sigma_b)
 
   B <- Sigma_b_inv + K
+  B_inv = solve(B)
 
   # X_f' A^{-1}
   XfAinv = Matrix::t(X_f) / sigma_eps2 - sigma_eps2^{-2} * ((Matrix::t(X_f) %*% X_t) %*% Gplus_inv) %*% Matrix::t(X_t)
