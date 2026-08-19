@@ -621,7 +621,8 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10, arma_o
     l2_track,
     AIC,
     fitted.mat,
-    var_eta_hat
+    var_eta_hat,
+    var_eps_hat
   )
 
 dat$final_resid = dat[[resp_var]] - fitted.mat[,2] - fitted.mat[,3]
@@ -643,7 +644,8 @@ print(acf(final_resid_daily$mean_resid,na.action = na.pass, main = "ACF of Final
     "level 2 log(likelihood)",
     "AIC",
     "Fitted_Values",
-    "Time Series Variance"
+    "Time Series Variance",
+    "Individual Variance"
   )
   ans2 = readline("Would you like to refit with a latent AR(1) process?
                   [1] Yes

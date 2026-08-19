@@ -633,7 +633,7 @@ var_beta <- function(
   XfSyinvXf = XfAinv %*% X_f - ((XfAinv %*% X_r) %*% B_inv) %*% Matrix::t(X_r) %*% Matrix::t(XfAinv)
   z = solve(XfSyinvXf)
   return(z)
-}
+
 
 
 
