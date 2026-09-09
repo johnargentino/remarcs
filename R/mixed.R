@@ -16,14 +16,11 @@
 #' @export
 RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10, arma_order = c(1,1)) {
 
-
-
-
   # --------------------------------------------------------------------------
   # Initial mixed-effects model and daily residual summaries
   # --------------------------------------------------------------------------
-  y = dat[[resp_var]]
 
+  y = dat[[resp_var]]
   resid <- stats::residuals(mod)
   dat$resid <- resid
   var_re = sigma(mod)^2 * tcrossprod(getME(mod, "Lambda"))
@@ -31,6 +28,7 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10, arma_o
   # --------------------------------------------------------------------------
   # Aggregate residuals
   # --------------------------------------------------------------------------
+
   df_w <- dat |>
     dplyr::group_by(t) |>
     dplyr::summarise(
@@ -49,12 +47,6 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10, arma_o
     tibble::tibble(t = 1:max(df_w$t)),
     df_w,
     by = "t"
-  )
-
-  stats::acf(
-    df_w$w,
-    na.action = stats::na.pass,
-    main = "ACF of average residuals"
   )
 
   # --------------------------------------------------------------------------
@@ -78,31 +70,8 @@ RCSmixed.fit <- function(mod, dat, resp_var, tol = 0.1, max_updates = 10, arma_o
   phi_hat <- arma_w$coef["ar1"]
   theta_b_hat <- arma_w$coef["ma1"]
   var_b_hat <- arma_w$sigma2
-  ans1 = readline(prompt = "Would you like to restrict the ARMA model?
-                 [1] AR(1)
-                 [2] MA(1)
-                 [3] No
-                 ")
 
-  if (ans1 == 1){
-    arma_w <- stats::arima(
-      df_w$w,
-      order = c(1, 0, 0),
-      include.mean = FALSE
-    )
-    phi_hat = arma_w$coef["ar1"]
-    theta_b_hat = 0
-    var_eta_hat = arma_w$sigma2
-  }else if(ans1 == 2){
-    arma_w <- stats::arima(
-      df_w$w,
-      order = c(0, 0, 1),
-      include.mean = FALSE
-    )
-    phi_hat = 0
-    theta_b_hat = arma_w$coef["ma1"]
-    var_eta_hat = arma_w$sigma2
-  }
+
 
 
 
